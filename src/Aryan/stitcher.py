@@ -42,7 +42,7 @@ class PanaromaStitcher:
                 if m.distance < 0.75 * n.distance:
                     good_matches.append(m)
 
-            # Extracting matched keypoints
+            # Extract matched keypoints
             src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
             dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
             H, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0) 
@@ -102,22 +102,29 @@ class PanaromaStitcher:
 
     def bilinear_interp_for_pixel_value(self, img, pt):
         x, y = pt[0], pt[1]
-        x_floor, y_floor = math.floor(x), math.floor(y)
-        x_diff, y_diff = x - x_floor, y - y_floor
-        pt_imin1_jmin1 = img[y_floor, x_floor]
-        pt_iplus1_jmin1 = img[y_floor, x_floor + 1]
-        pt_imin1_jplus1 = img[y_floor + 1, x_floor]
-        pt_iplus1_jplus1 = img[y_floor + 1, x_floor + 1]
-        pt_imin1_jmin1_wt = 1 / math.sqrt(x_diff**2 + y_diff**2 + 1e-10)
-        pt_iplus1_jmin1_wt = 1 / math.sqrt((1 - x_diff)**2 + y_diff**2 + 1e-10)
-        pt_imin1_jplus1_wt = 1 / math.sqrt(x_diff**2 + (1 - y_diff)**2 + 1e-10)
-        pt_iplus1_jplus1_wt = 1 / math.sqrt((1 - x_diff)**2 + (1 - y_diff)**2 + 1e-10)
+        x0, y0 = math.floor(x), math.floor(y)
+        xf, yf = x - x0, y - y0  # fractional parts
 
-        # Interpolated value
-        result_num = (pt_imin1_jmin1 * pt_imin1_jmin1_wt +
-                      pt_iplus1_jmin1 * pt_iplus1_jmin1_wt +
-                      pt_imin1_jplus1 * pt_imin1_jplus1_wt +
-                      pt_iplus1_jplus1 * pt_iplus1_jplus1_wt)
-        result_denom = pt_imin1_jmin1_wt + pt_iplus1_jmin1_wt + pt_imin1_jplus1_wt + pt_iplus1_jplus1_wt
-        return result_num / result_denom
+        #Checkboundaries
+        if x0 < 0 or x0 >= img.shape[1] - 1 or y0 < 0 or y0 >= img.shape[0] - 1:
+            return 0  # Out of bounds
+
+        
+        tl = img[y0, x0]
+        tr = img[y0, x0 + 1]
+        bl = img[y0 + 1, x0]
+        br = img[y0 + 1, x0 + 1]
+
+        #weights
+        wt_tl = 1 / math.sqrt(xf**2 + yf**2 + 1e-10)
+        wt_tr = 1 / math.sqrt((1 - xf)**2 + yf**2 + 1e-10)
+        wt_bl = 1 / math.sqrt(xf**2 + (1 - yf)**2 + 1e-10)
+        wt_br = 1 / math.sqrt((1 - xf)**2 + (1 - yf)**2 + 1e-10)
+
+        #weighted average
+        weighted_sum = (tl * wt_tl + tr * wt_tr + bl * wt_bl + br * wt_br)
+        total_weight = wt_tl + wt_tr + wt_bl + wt_br
+        return weighted_sum / total_weight
+
+
 
